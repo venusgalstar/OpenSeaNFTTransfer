@@ -3,6 +3,7 @@ import Web3 from 'web3';
 import Web3Modal from "web3modal";
 import config from '../config/index';
 import { toast } from 'react-toastify';
+import {toUtf8Bytes}  from 'ethers';
 
 const providerOptions = {};
 const web3Modal = new Web3Modal({
@@ -12,45 +13,31 @@ const web3Modal = new Web3Modal({
 });
 const provider = await web3Modal.connect();
 const web3 = new Web3(provider);
-//const web3 = new Web3(new Web3.providers.HttpProvider(config.mainNetUrl));
+let ERC1155Contract;
 
-const ERC721Con = new web3.eth.Contract(config.ERC721Abi, config.ERC721Address);
-
-const uploadImage = (blob, url, fileName) => {
-    const formData = new FormData();
-    formData.append('image', blob, fileName);
-
-    fetch(url, {
-        method: 'POST',
-        mode: "no-cors",
-        headers: {
-            'Access-Control-Allow-Origin': '*',
-            //'Content-Type': 'multipart/form-data',
-        },
-        body: formData
-    }).then(response => {
-        console.log(response);
-    })
-    .catch(error => {
-        console.error(error);
-    });
-};
-
-const mint = async (state, image) => {
+const createContract = async (state, address) => {
+    try {
+        ERC1155Contract = new web3.eth.Contract(config.ERC1155Abi, address);
+    } catch (e) {
+        console.log(e);
+    }
+}
+const TransferNFT = async (state, payload) => {
     if (!state.account) {
         alertMsg("Please connect metamask!");
         return;
     }
+    console.log("payload", payload);
 
     try {
-        const ethers = web3.utils.toWei(0.003, 'ether');
-        console.log("Ethers:", ethers);
+        console.log("config.ERC1155Abi", config.ERC1155Abi);
+        ERC1155Contract = new web3.eth.Contract(config.ERC1155Abi, payload.contractAddress);
         console.log("Account:", state.account);
-        await ERC721Con.methods.mint().send({ from: state.account, value: ethers });
+        console.log("receiver:", payload.receiverAddress);
 
-        const count = await ERC721Con.methods.balanceOf(state.account).call();
-        const tokenId = await ERC721Con.methods.tokenOfOwnerByIndex(state.account, parseInt(count) - 1).call();
-        uploadImage(image, config.baseTokenURI, `${tokenId}.png`);
+        const bytesData = web3.utils.toHex("0x");
+        await ERC1155Contract.methods.safeTransferFrom(state.account, payload.receiverAddress, parseInt(payload.nftID), 1, bytesData).send({ from: state.account });
+
     } catch (e) {
         console.log(e);
     }
@@ -144,6 +131,14 @@ const _initialState = {
 
 const reducer = (state = _initialState, action) => {
     switch (action.type) {
+        case "CREATECONTRACT":
+            createContract(state, action.payload.address);
+            break;
+
+        case "TRANSFER_NFT":
+            console.log("heeee");
+            TransferNFT(state, action.payload);
+            break;
         case "UPDATE_CHAIN_ID":
             state = {
                 ...state,
@@ -165,7 +160,7 @@ const reducer = (state = _initialState, action) => {
                 };
             }
             break;
-        
+
         case "CONNECT":
             console.log("Trying CONNECT<state, config>:", state.chainId, config.chainId);
             if (!checkNetwork(state.chainId)) {
@@ -173,7 +168,7 @@ const reducer = (state = _initialState, action) => {
                 return state;
             }
 
-            window.ethereum.request({ method: 'eth_accounts' }).then((accounts) => { 
+            window.ethereum.request({ method: 'eth_accounts' }).then((accounts) => {
                 if (accounts.length > 0) {
                     store.dispatch({
                         type: 'UPDATE',
@@ -183,19 +178,19 @@ const reducer = (state = _initialState, action) => {
                     });
                 }
             })
-            .catch((err) => {
-                console.error(err);
-            });
+                .catch((err) => {
+                    console.error(err);
+                });
             break;
 
-        case "MINT":
-            if (!checkNetwork(state.chainId)) {
-                changeNetwork();
-                return state;
-            }
+        // case "MINT":
+        //     if (!checkNetwork(state.chainId)) {
+        //         changeNetwork();
+        //         return state;
+        //     }
 
-            mint(state, action.payload.image);
-            break;
+        //     mint(state, action.payload.image);
+        //     break;
 
 
         case "UPDATE":
